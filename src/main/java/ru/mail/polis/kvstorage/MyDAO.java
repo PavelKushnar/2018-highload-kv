@@ -4,6 +4,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.NoSuchElementException;
 
 import org.jetbrains.annotations.NotNull;
@@ -19,8 +21,11 @@ public class MyDAO implements KVDao{
 
     private File storageFile;
 
+    private Map<String, Long> updateTime;
+
     public MyDAO(File file){
         storageFile = file;
+        updateTime = new HashMap<>();
     }
 
     private String encode(byte[] data){
@@ -40,8 +45,8 @@ public class MyDAO implements KVDao{
         return new String(newData);
     }
 
-    private File getFile(byte[] key) {
-        return new File(storageFile, encode(key));
+    private File getFile(String name) {
+        return new File(storageFile, name);
     }
 
     @NotNull
@@ -49,7 +54,7 @@ public class MyDAO implements KVDao{
     public byte[] get(@NotNull byte[] key) throws NoSuchElementException, IOException {
         byte[] data;
         try {
-            data = Files.readAllBytes(getFile(key).toPath());
+            data = Files.readAllBytes(getFile(encode(key)).toPath());
         } catch (NoSuchFileException e) {
             throw new NoSuchElementException();
         }
@@ -58,16 +63,29 @@ public class MyDAO implements KVDao{
 
     @Override
     public void upsert(@NotNull byte[] key, @NotNull byte[] value) throws IOException {
-        Files.write(getFile(key).toPath(), value);
+        String name = encode(key);
+        Files.write(getFile(name).toPath(), value);
+        updateTime(name);
     }
 
     @Override
     public void remove(@NotNull byte[] key) throws IOException {
         try {
-            Files.delete(getFile(key).toPath());
+            String name = encode(key);
+            Files.delete(getFile(name).toPath());
+            updateTime(name);
         } catch (NoSuchFileException e) {
             e.printStackTrace();
         }
+    }
+
+    public long getTime(byte[] key){
+        Long time = updateTime.get(encode(key));
+        return time == null ? 0 : time;
+    }
+
+    private void updateTime(String key){
+        updateTime.put(key, System.currentTimeMillis());
     }
 
     @Override
