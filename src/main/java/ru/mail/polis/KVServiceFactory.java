@@ -21,6 +21,10 @@ import org.jetbrains.annotations.NotNull;
 import java.io.IOException;
 import java.util.Set;
 
+import one.nio.http.HttpServerConfig;
+import one.nio.server.AcceptorConfig;
+import ru.mail.polis.kvstorage.MyService;
+
 /**
  * Constructs {@link KVService} instances.
  *
@@ -54,7 +58,10 @@ final class KVServiceFactory {
             throw new IllegalArgumentException("Port out of range");
         }
 
-        // TODO: Implement me
-        throw new UnsupportedOperationException("Implement me!");
+        HttpServerConfig config = new HttpServerConfig();
+        config.acceptors = new AcceptorConfig[1];
+        config.acceptors[0] = new AcceptorConfig();
+        config.acceptors[0].port = port;
+        return new MyService(config, dao, topology);
     }
 }
