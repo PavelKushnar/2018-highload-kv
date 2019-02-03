@@ -32,7 +32,7 @@ abstract public class TopologyStrategy{
             } else if (totalAck < getAck()){
                 return MyService.NOT_ENOUGH_REPLICAS_RESPONSE;
             } else {
-                return new Response(Response.NOT_FOUND, Response.EMPTY);
+                return MyService.NOT_FOUND_RESPONSE;
             }
         }
     }

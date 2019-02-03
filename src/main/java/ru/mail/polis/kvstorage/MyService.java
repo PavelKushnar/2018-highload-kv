@@ -11,6 +11,7 @@ import java.util.Set;
 import one.nio.http.HttpClient;
 import one.nio.http.HttpServer;
 import one.nio.http.HttpServerConfig;
+import one.nio.http.HttpSession;
 import one.nio.http.Path;
 import one.nio.http.Request;
 import one.nio.http.Response;
@@ -29,6 +30,14 @@ public class MyService extends HttpServer implements KVService{
     public final static Response NOT_ENOUGH_REPLICAS_RESPONSE = new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY);
     public final static Response SUCCESS_PUT_RESPONSE = new Response(Response.CREATED, Response.EMPTY);
     public final static Response SUCCESS_DELETE_RESPONSE = new Response(Response.ACCEPTED, Response.EMPTY);
+    public final static Response BAD_REQUEST_RESPONSE = new Response(Response.BAD_REQUEST, Response.EMPTY);
+    public final static Response NOT_FOUND_RESPONSE = new Response(Response.NOT_FOUND, Response.EMPTY);
+    public final static Response INTERNAL_ERROR_RESPONSE = new Response(Response.INTERNAL_ERROR, Response.EMPTY);
+
+    public final int STATUS_SUCCESS_GET = 200;
+    public final int STATUS_SUCCESS_PUT = 201;
+    public final int STATUS_SUCCESS_DELETE = 202;
+    public final int STATUS_NOT_FOUND = 404;
 
     private final Set<String> topology;
     private final List<String> topologyList;
@@ -69,9 +78,14 @@ public class MyService extends HttpServer implements KVService{
                     return handleDelete(request);
             }
         } catch (IllegalArgumentException e){
-            return new Response(Response.BAD_REQUEST, Response.EMPTY);
+            return BAD_REQUEST_RESPONSE;
         }
-        return new Response(Response.BAD_GATEWAY, Response.EMPTY);
+        return INTERNAL_ERROR_RESPONSE;
+    }
+
+    @Override
+    public void handleDefault(Request request, HttpSession session) throws IOException {
+        session.sendResponse(BAD_REQUEST_RESPONSE);
     }
 
     private Response handleGet(Request request) throws IllegalArgumentException{
@@ -117,10 +131,10 @@ public class MyService extends HttpServer implements KVService{
                         if (timeStr != null) {
                             time = Long.parseLong(timeStr);
                         }
-                        if (response.getStatus() == 200){
+                        if (response.getStatus() == STATUS_SUCCESS_GET){
                             strategy.addSuccess();
-                            strategy.addValue(Integer.parseInt(response.getHeader(UPDATED_VALUE_HEADER)), response.getBody());
-                        } else if (response.getStatus() == 404){
+                            strategy.addValue(Long.parseLong(response.getHeader(UPDATED_VALUE_HEADER)), response.getBody());
+                        } else if (response.getStatus() == STATUS_NOT_FOUND){
                             if (time != null) {
                                 strategy.addDeleted();
                             } else {
@@ -147,7 +161,7 @@ public class MyService extends HttpServer implements KVService{
                 response = SUCCESS_PUT_RESPONSE;
             } catch (IOException e){
                 e.printStackTrace();
-                response = new Response(Response.INTERNAL_ERROR, Response.EMPTY);
+                response = INTERNAL_ERROR_RESPONSE;
             }
             return response;
         } else{
@@ -164,7 +178,7 @@ public class MyService extends HttpServer implements KVService{
                 } else{
                     try {
                         Response response = clients.get(host).put(request.getURI(), value, QUERY_FROM_REPLICA);
-                        if (response.getStatus() == 201){
+                        if (response.getStatus() == STATUS_SUCCESS_PUT){
                             strategy.addSuccess();
                         }
                     } catch (Exception e) {
@@ -185,7 +199,7 @@ public class MyService extends HttpServer implements KVService{
                 response = SUCCESS_DELETE_RESPONSE;
             } catch (IOException e){
                 e.printStackTrace();
-                response = new Response(Response.INTERNAL_ERROR, Response.EMPTY);
+                response = INTERNAL_ERROR_RESPONSE;
             }
             return response;
         } else{
@@ -202,7 +216,7 @@ public class MyService extends HttpServer implements KVService{
                 } else{
                     try {
                         Response response = clients.get(host).delete(request.getURI(), QUERY_FROM_REPLICA);
-                        if (response.getStatus() == 202){
+                        if (response.getStatus() == STATUS_SUCCESS_DELETE){
                             strategy.addSuccess();
                         }
                     } catch (Exception e){
