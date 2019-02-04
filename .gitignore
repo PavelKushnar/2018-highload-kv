@@ -10,3 +10,4 @@
 
 !wrk/*.lua
 !async-profiler/*.svg
+!LOADTEST.md
