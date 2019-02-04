@@ -1,7 +1,7 @@
 # Профилирование
 ## Метод PUT
 ### Результаты async-profiler
-![PUT](async-profiler/put.svg)
+![PUT](https://github.com/PavelKushnar/2018-highload-kv/blob/master/async-profiler/put.svg)
 ### Утилита wrk
 ```
 wrk --latency -c2 -t2 -d2m -s put.lua http://localhost:8080
@@ -22,7 +22,7 @@ Transfer/sec:    117.01KB
 ```
 ## Метод GET
 ### Результаты async-profiler
-![PUT](async-profiler/put.svg)
+![PUT](https://github.com/PavelKushnar/2018-highload-kv/blob/master/async-profiler/put.svg)
 ### Утилита wrk
 ```wrk --latency -c2 -t2 -d2m -s get.lua http://localhost:8080
 Running 2m test @ http://localhost:8080
@@ -42,7 +42,7 @@ Transfer/sec:    401.25KB
 ```
 ## Метод DELETE
 ### Результаты async-profiler
-![PUT](async-profiler/put.svg)
+![PUT](https://github.com/PavelKushnar/2018-highload-kv/blob/master/async-profiler/put.svg)
 ### Утилита wrk
 ```
 wrk --latency -c2 -t2 -d2m -s delete.lua http://localhost:8080
