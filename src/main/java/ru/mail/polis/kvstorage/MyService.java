@@ -27,13 +27,6 @@ public class MyService extends HttpServer implements KVService{
     public final static String QUERY_FROM_REPLICA = "from-replica";
     public final static String UPDATED_VALUE_HEADER = "updated: ";
 
-    public final static Response NOT_ENOUGH_REPLICAS_RESPONSE = new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY);
-    public final static Response SUCCESS_PUT_RESPONSE = new Response(Response.CREATED, Response.EMPTY);
-    public final static Response SUCCESS_DELETE_RESPONSE = new Response(Response.ACCEPTED, Response.EMPTY);
-    public final static Response BAD_REQUEST_RESPONSE = new Response(Response.BAD_REQUEST, Response.EMPTY);
-    public final static Response NOT_FOUND_RESPONSE = new Response(Response.NOT_FOUND, Response.EMPTY);
-    public final static Response INTERNAL_ERROR_RESPONSE = new Response(Response.INTERNAL_ERROR, Response.EMPTY);
-
     public final int STATUS_SUCCESS_GET = 200;
     public final int STATUS_SUCCESS_PUT = 201;
     public final int STATUS_SUCCESS_DELETE = 202;
@@ -78,14 +71,14 @@ public class MyService extends HttpServer implements KVService{
                     return handleDelete(request);
             }
         } catch (IllegalArgumentException e){
-            return BAD_REQUEST_RESPONSE;
+            return createBadRequestResponse();
         }
-        return INTERNAL_ERROR_RESPONSE;
+        return createInternalErrorResponse();
     }
 
     @Override
     public void handleDefault(Request request, HttpSession session) throws IOException {
-        session.sendResponse(BAD_REQUEST_RESPONSE);
+        session.sendResponse(createBadRequestResponse());
     }
 
     private Response handleGet(Request request) throws IllegalArgumentException{
@@ -95,10 +88,10 @@ public class MyService extends HttpServer implements KVService{
             try{
                 response = new Response(Response.OK, dao.get(key));
             } catch (NoSuchElementException e) {
-                response = new Response(Response.NOT_FOUND, Response.EMPTY);
+                response = createNotFoundResponse();
             } catch (IOException e) {
                 e.printStackTrace();
-                response = new Response(Response.INTERNAL_ERROR, Response.EMPTY);
+                response = createInternalErrorResponse();
             }
             long time = dao.getTime(key);
             if (time > 0) {
@@ -158,10 +151,10 @@ public class MyService extends HttpServer implements KVService{
             Response response;
             try {
                 dao.upsert(key, value);
-                response = SUCCESS_PUT_RESPONSE;
+                response = createSuccessPutResponse();
             } catch (IOException e){
                 e.printStackTrace();
-                response = INTERNAL_ERROR_RESPONSE;
+                response = createInternalErrorResponse();
             }
             return response;
         } else{
@@ -196,10 +189,10 @@ public class MyService extends HttpServer implements KVService{
             Response response;
             try {
                 dao.remove(key);
-                response = SUCCESS_DELETE_RESPONSE;
+                response = createSuccessDeleteResponse();
             } catch (IOException e){
                 e.printStackTrace();
-                response = INTERNAL_ERROR_RESPONSE;
+                response = createInternalErrorResponse();
             }
             return response;
         } else{
@@ -279,5 +272,29 @@ public class MyService extends HttpServer implements KVService{
                 }
             }
         }
+    }
+
+    public static Response createNotEnoughReplicaResponse(){
+        return new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY);
+    }
+
+    public static Response createSuccessPutResponse(){
+        return new Response(Response.CREATED, Response.EMPTY);
+    }
+
+    public static Response createSuccessDeleteResponse(){
+        return new Response(Response.ACCEPTED, Response.EMPTY);
+    }
+
+    public static Response createBadRequestResponse(){
+        return new Response(Response.BAD_REQUEST, Response.EMPTY);
+    }
+
+    public static Response createNotFoundResponse(){
+        return new Response(Response.NOT_FOUND, Response.EMPTY);
+    }
+
+    public static Response createInternalErrorResponse(){
+        return new Response(Response.INTERNAL_ERROR, Response.EMPTY);
     }
 }

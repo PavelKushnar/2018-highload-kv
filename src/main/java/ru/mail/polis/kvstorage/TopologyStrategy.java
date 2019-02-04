@@ -30,9 +30,9 @@ abstract public class TopologyStrategy{
                 byte[] youngValue = values.get(times.get(times.size() - 1));
                 return Response.ok(youngValue);
             } else if (totalAck < getAck()){
-                return MyService.NOT_ENOUGH_REPLICAS_RESPONSE;
+                return MyService.createNotEnoughReplicaResponse();
             } else {
-                return MyService.NOT_FOUND_RESPONSE;
+                return MyService.createNotFoundResponse();
             }
         }
     }
@@ -44,7 +44,7 @@ abstract public class TopologyStrategy{
 
         @Override
         public Response getResponse() {
-            return this.getSuccess() >= this.getAck() ? MyService.SUCCESS_PUT_RESPONSE : MyService.NOT_ENOUGH_REPLICAS_RESPONSE;
+            return this.getSuccess() >= this.getAck() ? MyService.createSuccessPutResponse() : MyService.createNotEnoughReplicaResponse();
         }
     }
 
@@ -55,7 +55,7 @@ abstract public class TopologyStrategy{
 
         @Override
         public Response getResponse() {
-            return this.getSuccess() >= this.getAck() ? MyService.SUCCESS_DELETE_RESPONSE : MyService.NOT_ENOUGH_REPLICAS_RESPONSE;
+            return this.getSuccess() >= this.getAck() ? MyService.createSuccessDeleteResponse() : MyService.createNotEnoughReplicaResponse();
         }
     }
 

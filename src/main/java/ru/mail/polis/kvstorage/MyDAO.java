@@ -75,7 +75,6 @@ public class MyDAO implements KVDao{
             Files.delete(getFile(name).toPath());
             updateTime(name);
         } catch (NoSuchFileException e) {
-            e.printStackTrace();
         }
     }
 

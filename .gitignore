@@ -7,3 +7,6 @@
 
 # ...even if they are in subdirectories
 !*/
+
+!wrk/*.lua
+!async-profiler/*.svg

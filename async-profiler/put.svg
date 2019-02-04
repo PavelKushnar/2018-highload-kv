@@ -1,0 +1,1047 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="1200" height="454" onload="init(evt)" viewBox="0 0 1200 454" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<style type="text/css">
+	text { font-family:Verdana; font-size:12px; fill:black; }
+	.func_g:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+</style>
+<script type="text/ecmascript">
+<![CDATA[
+	var details, searchbtn, matchedtxt, svg;
+	function init(evt) {
+		details = document.getElementById("details").firstChild;
+		searchbtn = document.getElementById("search");
+		matchedtxt = document.getElementById("matched");
+		svg = document.getElementsByTagName("svg")[0];
+		searching = 0;
+	}
+
+	// mouse-over for info
+	function s(node) {		// show
+		info = g_to_text(node);
+		details.nodeValue = "Function: " + info;
+	}
+	function c() {			// clear
+		details.nodeValue = ' ';
+	}
+
+	// ctrl-F for search
+	window.addEventListener("keydown",function (e) {
+		if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+			e.preventDefault();
+			search_prompt();
+		}
+	})
+
+	// functions
+	function find_child(parent, name, attr) {
+		var children = parent.childNodes;
+		for (var i=0; i<children.length;i++) {
+			if (children[i].tagName == name)
+				return (attr != undefined) ? children[i].attributes[attr].value : children[i];
+		}
+		return;
+	}
+	function orig_save(e, attr, val) {
+		if (e.attributes["_orig_"+attr] != undefined) return;
+		if (e.attributes[attr] == undefined) return;
+		if (val == undefined) val = e.attributes[attr].value;
+		e.setAttribute("_orig_"+attr, val);
+	}
+	function orig_load(e, attr) {
+		if (e.attributes["_orig_"+attr] == undefined) return;
+		e.attributes[attr].value = e.attributes["_orig_"+attr].value;
+		e.removeAttribute("_orig_"+attr);
+	}
+	function g_to_text(e) {
+		var text = find_child(e, "title").firstChild.nodeValue;
+		return (text)
+	}
+	function g_to_func(e) {
+		var func = g_to_text(e);
+		// if there's any manipulation we want to do to the function
+		// name before it's searched, do it here before returning.
+		return (func);
+	}
+	function update_text(e) {
+		var r = find_child(e, "rect");
+		var t = find_child(e, "text");
+		var w = parseFloat(r.attributes["width"].value) -3;
+		var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+		t.attributes["x"].value = parseFloat(r.attributes["x"].value) +3;
+
+		// Smaller than this size won't fit anything
+		if (w < 2*12*0.59) {
+			t.textContent = "";
+			return;
+		}
+
+		t.textContent = txt;
+		// Fit in full text width
+		if (/^ *$/.test(txt) || t.getSubStringLength(0, txt.length) < w)
+			return;
+
+		for (var x=txt.length-2; x>0; x--) {
+			if (t.getSubStringLength(0, x+2) <= w) {
+				t.textContent = txt.substring(0,x) + "..";
+				return;
+			}
+		}
+		t.textContent = "";
+	}
+
+	// zoom
+	function zoom_reset(e) {
+		if (e.attributes != undefined) {
+			orig_load(e, "x");
+			orig_load(e, "width");
+		}
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_reset(c[i]);
+		}
+	}
+	function zoom_child(e, x, ratio) {
+		if (e.attributes != undefined) {
+			if (e.attributes["x"] != undefined) {
+				orig_save(e, "x");
+				e.attributes["x"].value = (parseFloat(e.attributes["x"].value) - x - 10) * ratio + 10;
+				if(e.tagName == "text") e.attributes["x"].value = find_child(e.parentNode, "rect", "x") + 3;
+			}
+			if (e.attributes["width"] != undefined) {
+				orig_save(e, "width");
+				e.attributes["width"].value = parseFloat(e.attributes["width"].value) * ratio;
+			}
+		}
+
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_child(c[i], x-10, ratio);
+		}
+	}
+	function zoom_parent(e) {
+		if (e.attributes) {
+			if (e.attributes["x"] != undefined) {
+				orig_save(e, "x");
+				e.attributes["x"].value = 10;
+			}
+			if (e.attributes["width"] != undefined) {
+				orig_save(e, "width");
+				e.attributes["width"].value = parseInt(svg.width.baseVal.value) - (10*2);
+			}
+		}
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_parent(c[i]);
+		}
+	}
+	function zoom(node) {
+		var attr = find_child(node, "rect").attributes;
+		var width = parseFloat(attr["width"].value);
+		var xmin = parseFloat(attr["x"].value);
+		var xmax = parseFloat(xmin + width);
+		var ymin = parseFloat(attr["y"].value);
+		var ratio = (svg.width.baseVal.value - 2*10) / width;
+
+		// XXX: Workaround for JavaScript float issues (fix me)
+		var fudge = 0.0001;
+
+		var unzoombtn = document.getElementById("unzoom");
+		unzoombtn.style["opacity"] = "1.0";
+
+		var el = document.getElementsByTagName("g");
+		for(var i=0;i<el.length;i++){
+			var e = el[i];
+			var a = find_child(e, "rect").attributes;
+			var ex = parseFloat(a["x"].value);
+			var ew = parseFloat(a["width"].value);
+			// Is it an ancestor
+			if (0 == 0) {
+				var upstack = parseFloat(a["y"].value) > ymin;
+			} else {
+				var upstack = parseFloat(a["y"].value) < ymin;
+			}
+			if (upstack) {
+				// Direct ancestor
+				if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+					e.style["opacity"] = "0.5";
+					zoom_parent(e);
+					e.onclick = function(e){unzoom(); zoom(this);};
+					update_text(e);
+				}
+				// not in current path
+				else
+					e.style["display"] = "none";
+			}
+			// Children maybe
+			else {
+				// no common path
+				if (ex < xmin || ex + fudge >= xmax) {
+					e.style["display"] = "none";
+				}
+				else {
+					zoom_child(e, xmin, ratio);
+					e.onclick = function(e){zoom(this);};
+					update_text(e);
+				}
+			}
+		}
+	}
+	function unzoom() {
+		var unzoombtn = document.getElementById("unzoom");
+		unzoombtn.style["opacity"] = "0.0";
+
+		var el = document.getElementsByTagName("g");
+		for(i=0;i<el.length;i++) {
+			el[i].style["display"] = "block";
+			el[i].style["opacity"] = "1";
+			zoom_reset(el[i]);
+			update_text(el[i]);
+		}
+	}
+
+	// search
+	function reset_search() {
+		var el = document.getElementsByTagName("rect");
+		for (var i=0; i < el.length; i++) {
+			orig_load(el[i], "fill")
+		}
+	}
+	function search_prompt() {
+		if (!searching) {
+			var term = prompt("Enter a search term (regexp " +
+			    "allowed, eg: ^ext4_)", "");
+			if (term != null) {
+				search(term)
+			}
+		} else {
+			reset_search();
+			searching = 0;
+			searchbtn.style["opacity"] = "0.1";
+			searchbtn.firstChild.nodeValue = "Search"
+			matchedtxt.style["opacity"] = "0.0";
+			matchedtxt.firstChild.nodeValue = ""
+		}
+	}
+	function search(term) {
+		var re = new RegExp(term);
+		var el = document.getElementsByTagName("g");
+		var matches = new Object();
+		var maxwidth = 0;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			if (e.attributes["class"].value != "func_g")
+				continue;
+			var func = g_to_func(e);
+			var rect = find_child(e, "rect");
+			if (rect == null) {
+				// the rect might be wrapped in an anchor
+				// if nameattr href is being used
+				if (rect = find_child(e, "a")) {
+				    rect = find_child(r, "rect");
+				}
+			}
+			if (func == null || rect == null)
+				continue;
+
+			// Save max width. Only works as we have a root frame
+			var w = parseFloat(rect.attributes["width"].value);
+			if (w > maxwidth)
+				maxwidth = w;
+
+			if (func.match(re)) {
+				// highlight
+				var x = parseFloat(rect.attributes["x"].value);
+				orig_save(rect, "fill");
+				rect.attributes["fill"].value =
+				    "rgb(230,0,230)";
+
+				// remember matches
+				if (matches[x] == undefined) {
+					matches[x] = w;
+				} else {
+					if (w > matches[x]) {
+						// overwrite with parent
+						matches[x] = w;
+					}
+				}
+				searching = 1;
+			}
+		}
+		if (!searching)
+			return;
+
+		searchbtn.style["opacity"] = "1.0";
+		searchbtn.firstChild.nodeValue = "Reset Search"
+
+		// calculate percent matched, excluding vertical overlap
+		var count = 0;
+		var lastx = -1;
+		var lastw = 0;
+		var keys = Array();
+		for (k in matches) {
+			if (matches.hasOwnProperty(k))
+				keys.push(k);
+		}
+		// sort the matched frames by their x location
+		// ascending, then width descending
+		keys.sort(function(a, b){
+			return a - b;
+		});
+		// Step through frames saving only the biggest bottom-up frames
+		// thanks to the sort order. This relies on the tree property
+		// where children are always smaller than their parents.
+		var fudge = 0.0001;	// JavaScript floating point
+		for (var k in keys) {
+			var x = parseFloat(keys[k]);
+			var w = matches[keys[k]];
+			if (x >= lastx + lastw - fudge) {
+				count += w;
+				lastx = x;
+				lastw = w;
+			}
+		}
+		// display matched percent
+		matchedtxt.style["opacity"] = "1.0";
+		pct = 100 * count / maxwidth;
+		if (pct == 100)
+			pct = "100"
+		else
+			pct = pct.toFixed(1)
+		matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+	}
+	function searchover(e) {
+		searchbtn.style["opacity"] = "1.0";
+	}
+	function searchout(e) {
+		if (searching) {
+			searchbtn.style["opacity"] = "1.0";
+		} else {
+			searchbtn.style["opacity"] = "0.1";
+		}
+	}
+]]>
+</script>
+<rect x="0" y="0" width="100%" height="100%" fill="rgb(240,240,220)"/>
+<text x="600" y="24" text-anchor="middle" style="font-size:17px">Flame Graph</text>
+<text x="10" y="437" id="details"> </text>
+<text x="10" y="24" id="unzoom" onclick="unzoom()" style="opacity:0.0;cursor:pointer">Reset Zoom</text>
+<text x="1090" y="24" id="search" onmouseover="searchover()" onmouseout="searchout()" onclick="search_prompt()" style="opacity:0.1;cursor:pointer">Search</text>
+<text x="1090" y="437" id="matched"> </text>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>all (4,299 samples, 100.00%)</title><rect x="10.0" y="403.0" width="1180.0" height="15" fill="#c83232" rx="2" ry="2"/>
+<text x="13.0" y="414.0">all</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (49 samples, 1.14%)</title><rect x="10.0" y="387.0" width="13.4" height="15" fill="#cf3c3c" rx="2" ry="2"/>
+<text x="13.0" y="398.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (8 samples, 0.19%)</title><rect x="21.0" y="371.0" width="2.2" height="15" fill="#f16e6e" rx="2" ry="2"/>
+<text x="24.0" y="382.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/server/SelectorThread.run (4,234 samples, 98.49%)</title><rect x="23.4" y="387.0" width="1162.2" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="26.4" y="398.0">one/nio/server/SelectorThread.run</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/net/JavaSelector.select (130 samples, 3.02%)</title><rect x="24.0" y="371.0" width="35.7" height="15" fill="#51e551" rx="2" ry="2"/>
+<text x="27.0" y="382.0">one..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SelectorImpl.select (126 samples, 2.93%)</title><rect x="24.8" y="355.0" width="34.6" height="15" fill="#3fd43f" rx="2" ry="2"/>
+<text x="27.8" y="366.0">su..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SelectorImpl.select (126 samples, 2.93%)</title><rect x="24.8" y="339.0" width="34.6" height="15" fill="#34ca34" rx="2" ry="2"/>
+<text x="27.8" y="350.0">su..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SelectorImpl.lockAndDoSelect (126 samples, 2.93%)</title><rect x="24.8" y="323.0" width="34.6" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="27.8" y="334.0">su..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/KQueueSelectorImpl.doSelect (126 samples, 2.93%)</title><rect x="24.8" y="307.0" width="34.6" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="27.8" y="318.0">su..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/KQueueArrayWrapper.poll (120 samples, 2.79%)</title><rect x="25.4" y="291.0" width="32.9" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="28.4" y="302.0">su..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/KQueueArrayWrapper.kevent0 (120 samples, 2.79%)</title><rect x="25.4" y="275.0" width="32.9" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="28.4" y="286.0">su..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (120 samples, 2.79%)</title><rect x="25.4" y="259.0" width="32.9" height="15" fill="#e45b5b" rx="2" ry="2"/>
+<text x="28.4" y="270.0">[u..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (120 samples, 2.79%)</title><rect x="25.4" y="243.0" width="32.9" height="15" fill="#f57474" rx="2" ry="2"/>
+<text x="28.4" y="254.0">[u..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>Java_sun_nio_ch_KQueueArrayWrapper_kevent0 (5 samples, 0.12%)</title><rect x="29.2" y="227.0" width="1.4" height="15" fill="#c93434" rx="2" ry="2"/>
+<text x="32.2" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>kevent (101 samples, 2.35%)</title><rect x="30.6" y="227.0" width="27.7" height="15" fill="#ca3636" rx="2" ry="2"/>
+<text x="33.6" y="238.0">k..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/net/Session.process (4,102 samples, 95.42%)</title><rect x="59.7" y="371.0" width="1125.9" height="15" fill="#51e551" rx="2" ry="2"/>
+<text x="62.7" y="382.0">one/nio/net/Session.process</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/http/HttpSession.processRead (4,101 samples, 95.39%)</title><rect x="60.0" y="355.0" width="1125.6" height="15" fill="#5aec5a" rx="2" ry="2"/>
+<text x="63.0" y="366.0">one/nio/http/HttpSession.processRead</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/http/HttpSession.processHttpBuffer (4,053 samples, 94.28%)</title><rect x="60.0" y="339.0" width="1112.4" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="63.0" y="350.0">one/nio/http/HttpSession.processHttpBuffer</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/http/HttpSession.handleParsedRequest (4,040 samples, 93.98%)</title><rect x="60.2" y="323.0" width="1108.9" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="63.2" y="334.0">one/nio/http/HttpSession.handleParsedRequest</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/http/HttpServer.handleRequest (4,040 samples, 93.98%)</title><rect x="60.2" y="307.0" width="1108.9" height="15" fill="#36cb36" rx="2" ry="2"/>
+<text x="63.2" y="318.0">one/nio/http/HttpServer.handleRequest</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>RequestHandler1_storageEndpoint.handleRequest (4,035 samples, 93.86%)</title><rect x="60.2" y="291.0" width="1107.6" height="15" fill="#4bde4b" rx="2" ry="2"/>
+<text x="63.2" y="302.0">RequestHandler1_storageEndpoint.handleRequest</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/http/HttpSession.sendResponse (107 samples, 2.49%)</title><rect x="60.2" y="275.0" width="29.4" height="15" fill="#5bed5b" rx="2" ry="2"/>
+<text x="63.2" y="286.0">on..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/http/HttpSession.writeResponse (101 samples, 2.35%)</title><rect x="60.8" y="259.0" width="27.7" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="63.8" y="270.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/http/Response.toBytes (4 samples, 0.09%)</title><rect x="60.8" y="243.0" width="1.1" height="15" fill="#69fb69" rx="2" ry="2"/>
+<text x="63.8" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (4 samples, 0.09%)</title><rect x="60.8" y="227.0" width="1.1" height="15" fill="#f67575" rx="2" ry="2"/>
+<text x="63.8" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/net/Session.write (97 samples, 2.26%)</title><rect x="61.9" y="243.0" width="26.6" height="15" fill="#51e451" rx="2" ry="2"/>
+<text x="64.9" y="254.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/net/Session.write (97 samples, 2.26%)</title><rect x="61.9" y="227.0" width="26.6" height="15" fill="#37cd37" rx="2" ry="2"/>
+<text x="64.9" y="238.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/net/Session.write (97 samples, 2.26%)</title><rect x="61.9" y="211.0" width="26.6" height="15" fill="#59eb59" rx="2" ry="2"/>
+<text x="64.9" y="222.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/net/Session$ArrayQueueItem.write (97 samples, 2.26%)</title><rect x="61.9" y="195.0" width="26.6" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="64.9" y="206.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/net/JavaSocket.write (97 samples, 2.26%)</title><rect x="61.9" y="179.0" width="26.6" height="15" fill="#5cee5c" rx="2" ry="2"/>
+<text x="64.9" y="190.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketChannelImpl.write (97 samples, 2.26%)</title><rect x="61.9" y="163.0" width="26.6" height="15" fill="#68fa68" rx="2" ry="2"/>
+<text x="64.9" y="174.0">s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.write (91 samples, 2.12%)</title><rect x="63.2" y="147.0" width="25.0" height="15" fill="#5ff15f" rx="2" ry="2"/>
+<text x="66.2" y="158.0">s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.writeFromNativeBuffer (91 samples, 2.12%)</title><rect x="63.2" y="131.0" width="25.0" height="15" fill="#41d641" rx="2" ry="2"/>
+<text x="66.2" y="142.0">s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketDispatcher.write (91 samples, 2.12%)</title><rect x="63.2" y="115.0" width="25.0" height="15" fill="#34ca34" rx="2" ry="2"/>
+<text x="66.2" y="126.0">s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileDispatcherImpl.write0 (91 samples, 2.12%)</title><rect x="63.2" y="99.0" width="25.0" height="15" fill="#5ef05e" rx="2" ry="2"/>
+<text x="66.2" y="110.0">s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (91 samples, 2.12%)</title><rect x="63.2" y="83.0" width="25.0" height="15" fill="#da4c4c" rx="2" ry="2"/>
+<text x="66.2" y="94.0">[..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (91 samples, 2.12%)</title><rect x="63.2" y="67.0" width="25.0" height="15" fill="#ea6464" rx="2" ry="2"/>
+<text x="66.2" y="78.0">[..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>write (84 samples, 1.95%)</title><rect x="65.2" y="51.0" width="23.0" height="15" fill="#f16e6e" rx="2" ry="2"/>
+<text x="68.2" y="62.0">w..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/http/Request.getHeader (4 samples, 0.09%)</title><rect x="88.5" y="259.0" width="1.1" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="91.5" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ru/mail/polis/kvstorage/MyService.storageEndpoint (3,928 samples, 91.37%)</title><rect x="89.6" y="275.0" width="1078.2" height="15" fill="#47dc47" rx="2" ry="2"/>
+<text x="92.6" y="286.0">ru/mail/polis/kvstorage/MyService.storageEndpoint</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ru/mail/polis/kvstorage/MyService.handlePut (3,926 samples, 91.32%)</title><rect x="90.1" y="259.0" width="1077.7" height="15" fill="#40d540" rx="2" ry="2"/>
+<text x="93.1" y="270.0">ru/mail/polis/kvstorage/MyService.handlePut</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/http/HttpClient.put (261 samples, 6.07%)</title><rect x="90.7" y="243.0" width="71.6" height="15" fill="#6cfe6c" rx="2" ry="2"/>
+<text x="93.7" y="254.0">one/nio/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/http/HttpClient.invoke (261 samples, 6.07%)</title><rect x="90.7" y="227.0" width="71.6" height="15" fill="#5def5d" rx="2" ry="2"/>
+<text x="93.7" y="238.0">one/nio/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/http/HttpClient$ResponseReader.&lt;init&gt; (149 samples, 3.47%)</title><rect x="91.5" y="211.0" width="40.9" height="15" fill="#5ff15f" rx="2" ry="2"/>
+<text x="94.5" y="222.0">one..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/net/JavaSocket.read (149 samples, 3.47%)</title><rect x="91.5" y="195.0" width="40.9" height="15" fill="#59eb59" rx="2" ry="2"/>
+<text x="94.5" y="206.0">one..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (15 samples, 0.35%)</title><rect x="91.5" y="179.0" width="4.1" height="15" fill="#cb3737" rx="2" ry="2"/>
+<text x="94.5" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketChannelImpl.read (134 samples, 3.12%)</title><rect x="95.6" y="179.0" width="36.8" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="98.6" y="190.0">sun..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (4 samples, 0.09%)</title><rect x="95.6" y="163.0" width="1.1" height="15" fill="#f87878" rx="2" ry="2"/>
+<text x="98.6" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.read (124 samples, 2.88%)</title><rect x="97.6" y="163.0" width="34.0" height="15" fill="#42d642" rx="2" ry="2"/>
+<text x="100.6" y="174.0">su..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.readIntoNativeBuffer (122 samples, 2.84%)</title><rect x="97.8" y="147.0" width="33.5" height="15" fill="#4ce04c" rx="2" ry="2"/>
+<text x="100.8" y="158.0">su..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketDispatcher.read (121 samples, 2.81%)</title><rect x="98.1" y="131.0" width="33.2" height="15" fill="#5ff25f" rx="2" ry="2"/>
+<text x="101.1" y="142.0">su..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileDispatcherImpl.read0 (121 samples, 2.81%)</title><rect x="98.1" y="115.0" width="33.2" height="15" fill="#4ee24e" rx="2" ry="2"/>
+<text x="101.1" y="126.0">su..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (121 samples, 2.81%)</title><rect x="98.1" y="99.0" width="33.2" height="15" fill="#d54545" rx="2" ry="2"/>
+<text x="101.1" y="110.0">[u..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (121 samples, 2.81%)</title><rect x="98.1" y="83.0" width="33.2" height="15" fill="#d74747" rx="2" ry="2"/>
+<text x="101.1" y="94.0">[u..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>Java_sun_nio_ch_FileDispatcherImpl_read0 (5 samples, 0.12%)</title><rect x="99.8" y="67.0" width="1.3" height="15" fill="#db4e4e" rx="2" ry="2"/>
+<text x="102.8" y="78.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>read (109 samples, 2.54%)</title><rect x="101.4" y="67.0" width="29.9" height="15" fill="#d13f3f" rx="2" ry="2"/>
+<text x="104.4" y="78.0">read</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/http/HttpClient$ResponseReader.readResponse (4 samples, 0.09%)</title><rect x="132.4" y="211.0" width="1.1" height="15" fill="#4fe24f" rx="2" ry="2"/>
+<text x="135.4" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/http/Request.toBytes (8 samples, 0.19%)</title><rect x="133.5" y="211.0" width="2.2" height="15" fill="#67f967" rx="2" ry="2"/>
+<text x="136.5" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/util/ByteArrayBuilder.append (7 samples, 0.16%)</title><rect x="133.8" y="195.0" width="1.9" height="15" fill="#68fa68" rx="2" ry="2"/>
+<text x="136.8" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/util/Utf8.write (4 samples, 0.09%)</title><rect x="134.6" y="179.0" width="1.1" height="15" fill="#35cb35" rx="2" ry="2"/>
+<text x="137.6" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/util/Utf8.write (4 samples, 0.09%)</title><rect x="134.6" y="163.0" width="1.1" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="137.6" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/net/JavaSocket.writeFully (97 samples, 2.26%)</title><rect x="135.7" y="211.0" width="26.6" height="15" fill="#50e350" rx="2" ry="2"/>
+<text x="138.7" y="222.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketChannelImpl.write (96 samples, 2.23%)</title><rect x="136.0" y="195.0" width="26.3" height="15" fill="#50e450" rx="2" ry="2"/>
+<text x="139.0" y="206.0">s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.write (91 samples, 2.12%)</title><rect x="137.4" y="179.0" width="24.9" height="15" fill="#45d945" rx="2" ry="2"/>
+<text x="140.4" y="190.0">s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.writeFromNativeBuffer (89 samples, 2.07%)</title><rect x="137.4" y="163.0" width="24.4" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="140.4" y="174.0">s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketDispatcher.write (89 samples, 2.07%)</title><rect x="137.4" y="147.0" width="24.4" height="15" fill="#4fe34f" rx="2" ry="2"/>
+<text x="140.4" y="158.0">s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileDispatcherImpl.write0 (89 samples, 2.07%)</title><rect x="137.4" y="131.0" width="24.4" height="15" fill="#41d641" rx="2" ry="2"/>
+<text x="140.4" y="142.0">s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (89 samples, 2.07%)</title><rect x="137.4" y="115.0" width="24.4" height="15" fill="#cc3939" rx="2" ry="2"/>
+<text x="140.4" y="126.0">[..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (89 samples, 2.07%)</title><rect x="137.4" y="99.0" width="24.4" height="15" fill="#fc7d7d" rx="2" ry="2"/>
+<text x="140.4" y="110.0">[..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>write (86 samples, 2.00%)</title><rect x="138.2" y="83.0" width="23.6" height="15" fill="#cc3737" rx="2" ry="2"/>
+<text x="141.2" y="94.0">w..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ru/mail/polis/kvstorage/MyDAO.upsert (3,648 samples, 84.86%)</title><rect x="162.3" y="243.0" width="1001.3" height="15" fill="#50e350" rx="2" ry="2"/>
+<text x="165.3" y="254.0">ru/mail/polis/kvstorage/MyDAO.upsert</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/io/File.toPath (7 samples, 0.16%)</title><rect x="162.3" y="227.0" width="2.0" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="165.3" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/fs/UnixFileSystem.getPath (7 samples, 0.16%)</title><rect x="162.3" y="211.0" width="2.0" height="15" fill="#42d742" rx="2" ry="2"/>
+<text x="165.3" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/fs/UnixPath.&lt;init&gt; (7 samples, 0.16%)</title><rect x="162.3" y="195.0" width="2.0" height="15" fill="#68fa68" rx="2" ry="2"/>
+<text x="165.3" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/fs/UnixPath.encode (6 samples, 0.14%)</title><rect x="162.3" y="179.0" width="1.7" height="15" fill="#51e551" rx="2" ry="2"/>
+<text x="165.3" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/nio/file/Files.write (3,628 samples, 84.39%)</title><rect x="164.3" y="227.0" width="995.8" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="167.3" y="238.0">java/nio/file/Files.write</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/nio/channels/Channels$1.close (904 samples, 21.03%)</title><rect x="164.5" y="211.0" width="248.2" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="167.5" y="222.0">java/nio/channels/Channels$1.close</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/nio/channels/spi/AbstractInterruptibleChannel.close (904 samples, 21.03%)</title><rect x="164.5" y="195.0" width="248.2" height="15" fill="#35ca35" rx="2" ry="2"/>
+<text x="167.5" y="206.0">java/nio/channels/spi/AbstractInt..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileChannelImpl.implCloseChannel (904 samples, 21.03%)</title><rect x="164.5" y="179.0" width="248.2" height="15" fill="#5ff15f" rx="2" ry="2"/>
+<text x="167.5" y="190.0">sun/nio/ch/FileChannelImpl.implCl..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileDispatcherImpl.close (904 samples, 21.03%)</title><rect x="164.5" y="163.0" width="248.2" height="15" fill="#60f260" rx="2" ry="2"/>
+<text x="167.5" y="174.0">sun/nio/ch/FileDispatcherImpl.close</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileDispatcherImpl.close0 (904 samples, 21.03%)</title><rect x="164.5" y="147.0" width="248.2" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="167.5" y="158.0">sun/nio/ch/FileDispatcherImpl.clo..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (904 samples, 21.03%)</title><rect x="164.5" y="131.0" width="248.2" height="15" fill="#ce3c3c" rx="2" ry="2"/>
+<text x="167.5" y="142.0">[unknown]</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (904 samples, 21.03%)</title><rect x="164.5" y="115.0" width="248.2" height="15" fill="#c83333" rx="2" ry="2"/>
+<text x="167.5" y="126.0">[unknown]</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>close (895 samples, 20.82%)</title><rect x="166.5" y="99.0" width="245.6" height="15" fill="#ed6969" rx="2" ry="2"/>
+<text x="169.5" y="110.0">close</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/nio/channels/Channels$1.write (887 samples, 20.63%)</title><rect x="412.7" y="211.0" width="243.4" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="415.7" y="222.0">java/nio/channels/Channels$1.write</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/nio/channels/Channels.access$000 (887 samples, 20.63%)</title><rect x="412.7" y="195.0" width="243.4" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="415.7" y="206.0">java/nio/channels/Channels.acces..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/nio/channels/Channels.writeFully (887 samples, 20.63%)</title><rect x="412.7" y="179.0" width="243.4" height="15" fill="#5ef05e" rx="2" ry="2"/>
+<text x="415.7" y="190.0">java/nio/channels/Channels.write..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/nio/channels/Channels.writeFullyImpl (887 samples, 20.63%)</title><rect x="412.7" y="163.0" width="243.4" height="15" fill="#5def5d" rx="2" ry="2"/>
+<text x="415.7" y="174.0">java/nio/channels/Channels.write..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileChannelImpl.write (887 samples, 20.63%)</title><rect x="412.7" y="147.0" width="243.4" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="415.7" y="158.0">sun/nio/ch/FileChannelImpl.write</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.write (876 samples, 20.38%)</title><rect x="413.2" y="131.0" width="240.5" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="416.2" y="142.0">sun/nio/ch/IOUtil.write</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.writeFromNativeBuffer (873 samples, 20.31%)</title><rect x="413.2" y="115.0" width="239.6" height="15" fill="#3fd43f" rx="2" ry="2"/>
+<text x="416.2" y="126.0">sun/nio/ch/IOUtil.writeFromNativ..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileDispatcherImpl.write (873 samples, 20.31%)</title><rect x="413.2" y="99.0" width="239.6" height="15" fill="#44d844" rx="2" ry="2"/>
+<text x="416.2" y="110.0">sun/nio/ch/FileDispatcherImpl.wr..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (12 samples, 0.28%)</title><rect x="413.2" y="83.0" width="3.3" height="15" fill="#db4e4e" rx="2" ry="2"/>
+<text x="416.2" y="94.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileDispatcherImpl.write0 (861 samples, 20.03%)</title><rect x="416.5" y="83.0" width="236.3" height="15" fill="#50e450" rx="2" ry="2"/>
+<text x="419.5" y="94.0">sun/nio/ch/FileDispatcherImpl.w..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (861 samples, 20.03%)</title><rect x="416.5" y="67.0" width="236.3" height="15" fill="#e86161" rx="2" ry="2"/>
+<text x="419.5" y="78.0">[unknown]</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (861 samples, 20.03%)</title><rect x="416.5" y="51.0" width="236.3" height="15" fill="#f67575" rx="2" ry="2"/>
+<text x="419.5" y="62.0">[unknown]</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>write (855 samples, 19.89%)</title><rect x="418.2" y="35.0" width="234.6" height="15" fill="#de5252" rx="2" ry="2"/>
+<text x="421.2" y="46.0">write</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/NativeThreadSet.add (9 samples, 0.21%)</title><rect x="653.7" y="131.0" width="2.4" height="15" fill="#64f664" rx="2" ry="2"/>
+<text x="656.7" y="142.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (7 samples, 0.16%)</title><rect x="653.7" y="115.0" width="1.9" height="15" fill="#d64747" rx="2" ry="2"/>
+<text x="656.7" y="126.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/nio/file/Files.newOutputStream (1,836 samples, 42.71%)</title><rect x="656.1" y="211.0" width="504.0" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="659.1" y="222.0">java/nio/file/Files.newOutputStream</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/nio/file/spi/FileSystemProvider.newOutputStream (1,836 samples, 42.71%)</title><rect x="656.1" y="195.0" width="504.0" height="15" fill="#52e552" rx="2" ry="2"/>
+<text x="659.1" y="206.0">java/nio/file/spi/FileSystemProvider.newOutputStream</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/HashSet.add (7 samples, 0.16%)</title><rect x="656.1" y="179.0" width="2.0" height="15" fill="#4ee14e" rx="2" ry="2"/>
+<text x="659.1" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/HashMap.put (7 samples, 0.16%)</title><rect x="656.1" y="163.0" width="2.0" height="15" fill="#43d743" rx="2" ry="2"/>
+<text x="659.1" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/fs/UnixFileSystemProvider.newByteChannel (1,829 samples, 42.54%)</title><rect x="658.1" y="179.0" width="502.0" height="15" fill="#3cd13c" rx="2" ry="2"/>
+<text x="661.1" y="190.0">sun/nio/fs/UnixFileSystemProvider.newByteChannel</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/fs/UnixChannelFactory.newFileChannel (1,829 samples, 42.54%)</title><rect x="658.1" y="163.0" width="502.0" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="661.1" y="174.0">sun/nio/fs/UnixChannelFactory.newFileChannel</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/fs/UnixChannelFactory.newFileChannel (1,829 samples, 42.54%)</title><rect x="658.1" y="147.0" width="502.0" height="15" fill="#54e754" rx="2" ry="2"/>
+<text x="661.1" y="158.0">sun/nio/fs/UnixChannelFactory.newFileChannel</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileChannelImpl.open (5 samples, 0.12%)</title><rect x="658.1" y="131.0" width="1.3" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="661.1" y="142.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileChannelImpl.&lt;init&gt; (5 samples, 0.12%)</title><rect x="658.1" y="115.0" width="1.3" height="15" fill="#33c933" rx="2" ry="2"/>
+<text x="661.1" y="126.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileDispatcherImpl.&lt;init&gt; (5 samples, 0.12%)</title><rect x="658.1" y="99.0" width="1.3" height="15" fill="#52e552" rx="2" ry="2"/>
+<text x="661.1" y="110.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileDispatcher.&lt;init&gt; (5 samples, 0.12%)</title><rect x="658.1" y="83.0" width="1.3" height="15" fill="#4fe34f" rx="2" ry="2"/>
+<text x="661.1" y="94.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/NativeDispatcher.&lt;init&gt; (5 samples, 0.12%)</title><rect x="658.1" y="67.0" width="1.3" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="661.1" y="78.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (5 samples, 0.12%)</title><rect x="658.1" y="51.0" width="1.3" height="15" fill="#f16d6d" rx="2" ry="2"/>
+<text x="661.1" y="62.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/fs/UnixChannelFactory.open (1,812 samples, 42.15%)</title><rect x="660.0" y="131.0" width="497.3" height="15" fill="#53e653" rx="2" ry="2"/>
+<text x="663.0" y="142.0">sun/nio/fs/UnixChannelFactory.open</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/fs/UnixNativeDispatcher.open (1,810 samples, 42.10%)</title><rect x="660.5" y="115.0" width="496.8" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="663.5" y="126.0">sun/nio/fs/UnixNativeDispatcher.open</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/fs/UnixNativeDispatcher.copyToNativeBuffer (4 samples, 0.09%)</title><rect x="661.1" y="99.0" width="1.1" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="664.1" y="110.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/fs/NativeBuffers.getNativeBufferFromCache (4 samples, 0.09%)</title><rect x="661.1" y="83.0" width="1.1" height="15" fill="#64f664" rx="2" ry="2"/>
+<text x="664.1" y="94.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/ThreadLocal.get (4 samples, 0.09%)</title><rect x="661.1" y="67.0" width="1.1" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="664.1" y="78.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (4 samples, 0.09%)</title><rect x="661.1" y="51.0" width="1.1" height="15" fill="#d34343" rx="2" ry="2"/>
+<text x="664.1" y="62.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/fs/UnixNativeDispatcher.open0 (1,804 samples, 41.96%)</title><rect x="662.2" y="99.0" width="495.1" height="15" fill="#5cef5c" rx="2" ry="2"/>
+<text x="665.2" y="110.0">sun/nio/fs/UnixNativeDispatcher.open0</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (1,804 samples, 41.96%)</title><rect x="662.2" y="83.0" width="495.1" height="15" fill="#cf3c3c" rx="2" ry="2"/>
+<text x="665.2" y="94.0">[unknown]</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (1,804 samples, 41.96%)</title><rect x="662.2" y="67.0" width="495.1" height="15" fill="#cd3939" rx="2" ry="2"/>
+<text x="665.2" y="78.0">[unknown]</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>Java_sun_nio_fs_UnixNativeDispatcher_open0 (6 samples, 0.14%)</title><rect x="664.9" y="51.0" width="1.7" height="15" fill="#d74747" rx="2" ry="2"/>
+<text x="667.9" y="62.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__open (1,788 samples, 41.59%)</title><rect x="666.6" y="51.0" width="490.7" height="15" fill="#c83232" rx="2" ry="2"/>
+<text x="669.6" y="62.0">__open</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/fs/UnixPath.toString (10 samples, 0.23%)</title><rect x="1157.3" y="131.0" width="2.8" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="1160.3" y="142.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/fs/Util.toString (10 samples, 0.23%)</title><rect x="1157.3" y="115.0" width="2.8" height="15" fill="#33c933" rx="2" ry="2"/>
+<text x="1160.3" y="126.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/String.&lt;init&gt; (10 samples, 0.23%)</title><rect x="1157.3" y="99.0" width="2.8" height="15" fill="#5cef5c" rx="2" ry="2"/>
+<text x="1160.3" y="110.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/String.&lt;init&gt; (10 samples, 0.23%)</title><rect x="1157.3" y="83.0" width="2.8" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="1160.3" y="94.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/StringCoding.decode (10 samples, 0.23%)</title><rect x="1157.3" y="67.0" width="2.8" height="15" fill="#40d540" rx="2" ry="2"/>
+<text x="1160.3" y="78.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (5 samples, 0.12%)</title><rect x="1157.3" y="51.0" width="1.4" height="15" fill="#d14040" rx="2" ry="2"/>
+<text x="1160.3" y="62.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/cs/UTF_8$Decoder.decode (4 samples, 0.09%)</title><rect x="1159.0" y="51.0" width="1.1" height="15" fill="#45d945" rx="2" ry="2"/>
+<text x="1162.0" y="62.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (4 samples, 0.09%)</title><rect x="1159.0" y="35.0" width="1.1" height="15" fill="#f87878" rx="2" ry="2"/>
+<text x="1162.0" y="46.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ru/mail/polis/kvstorage/MyDAO.updateTime (7 samples, 0.16%)</title><rect x="1161.7" y="227.0" width="1.9" height="15" fill="#59eb59" rx="2" ry="2"/>
+<text x="1164.7" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/HashMap.put (6 samples, 0.14%)</title><rect x="1162.0" y="211.0" width="1.6" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="1165.0" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/HashMap.putVal (6 samples, 0.14%)</title><rect x="1162.0" y="195.0" width="1.6" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="1165.0" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (6 samples, 0.14%)</title><rect x="1162.0" y="179.0" width="1.6" height="15" fill="#dd5050" rx="2" ry="2"/>
+<text x="1165.0" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ru/mail/polis/kvstorage/MyService.getKey (7 samples, 0.16%)</title><rect x="1165.3" y="243.0" width="1.9" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="1168.3" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/String.getBytes (4 samples, 0.09%)</title><rect x="1165.6" y="227.0" width="1.1" height="15" fill="#4fe34f" rx="2" ry="2"/>
+<text x="1168.6" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/StringCoding.encode (4 samples, 0.09%)</title><rect x="1165.6" y="211.0" width="1.1" height="15" fill="#3ad03a" rx="2" ry="2"/>
+<text x="1168.6" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/StringCoding.encode (4 samples, 0.09%)</title><rect x="1165.6" y="195.0" width="1.1" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="1168.6" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/HashMap.get (4 samples, 0.09%)</title><rect x="1168.0" y="291.0" width="1.1" height="15" fill="#64f664" rx="2" ry="2"/>
+<text x="1171.0" y="302.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/HashMap.getNode (4 samples, 0.09%)</title><rect x="1168.0" y="275.0" width="1.1" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="1171.0" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (4 samples, 0.09%)</title><rect x="1168.0" y="259.0" width="1.1" height="15" fill="#fc7e7e" rx="2" ry="2"/>
+<text x="1171.0" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/http/HttpSession.parseRequest (4 samples, 0.09%)</title><rect x="1169.1" y="323.0" width="1.1" height="15" fill="#53e653" rx="2" ry="2"/>
+<text x="1172.1" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/util/Utf8.read (5 samples, 0.12%)</title><rect x="1171.1" y="323.0" width="1.3" height="15" fill="#3ad03a" rx="2" ry="2"/>
+<text x="1174.1" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/util/Utf8.read (5 samples, 0.12%)</title><rect x="1171.1" y="307.0" width="1.3" height="15" fill="#6cfe6c" rx="2" ry="2"/>
+<text x="1174.1" y="318.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/net/Session.read (48 samples, 1.12%)</title><rect x="1172.4" y="339.0" width="13.2" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="1175.4" y="350.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>one/nio/net/JavaSocket.read (48 samples, 1.12%)</title><rect x="1172.4" y="323.0" width="13.2" height="15" fill="#3acf3a" rx="2" ry="2"/>
+<text x="1175.4" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketChannelImpl.read (48 samples, 1.12%)</title><rect x="1172.4" y="307.0" width="13.2" height="15" fill="#53e753" rx="2" ry="2"/>
+<text x="1175.4" y="318.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.read (41 samples, 0.95%)</title><rect x="1173.3" y="291.0" width="11.2" height="15" fill="#41d541" rx="2" ry="2"/>
+<text x="1176.3" y="302.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.readIntoNativeBuffer (35 samples, 0.81%)</title><rect x="1173.3" y="275.0" width="9.6" height="15" fill="#4fe24f" rx="2" ry="2"/>
+<text x="1176.3" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketDispatcher.read (34 samples, 0.79%)</title><rect x="1173.5" y="259.0" width="9.4" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="1176.5" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileDispatcherImpl.read0 (34 samples, 0.79%)</title><rect x="1173.5" y="243.0" width="9.4" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="1176.5" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (34 samples, 0.79%)</title><rect x="1173.5" y="227.0" width="9.4" height="15" fill="#ce3c3c" rx="2" ry="2"/>
+<text x="1176.5" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (34 samples, 0.79%)</title><rect x="1173.5" y="211.0" width="9.4" height="15" fill="#d24141" rx="2" ry="2"/>
+<text x="1176.5" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>read (32 samples, 0.74%)</title><rect x="1174.1" y="195.0" width="8.8" height="15" fill="#d94b4b" rx="2" ry="2"/>
+<text x="1177.1" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/Util.getTemporaryDirectBuffer (6 samples, 0.14%)</title><rect x="1182.9" y="275.0" width="1.6" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="1185.9" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/NativeThread.current (4 samples, 0.09%)</title><rect x="1184.5" y="291.0" width="1.1" height="15" fill="#39ce39" rx="2" ry="2"/>
+<text x="1187.5" y="302.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (4 samples, 0.09%)</title><rect x="1184.5" y="275.0" width="1.1" height="15" fill="#eb6666" rx="2" ry="2"/>
+<text x="1187.5" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>thread_start (15 samples, 0.35%)</title><rect x="1185.9" y="387.0" width="4.1" height="15" fill="#ea6363" rx="2" ry="2"/>
+<text x="1188.9" y="398.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>_pthread_body (15 samples, 0.35%)</title><rect x="1185.9" y="371.0" width="4.1" height="15" fill="#f47272" rx="2" ry="2"/>
+<text x="1188.9" y="382.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>_pthread_body (15 samples, 0.35%)</title><rect x="1185.9" y="355.0" width="4.1" height="15" fill="#d54545" rx="2" ry="2"/>
+<text x="1188.9" y="366.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java_start(Thread*) (15 samples, 0.35%)</title><rect x="1185.9" y="339.0" width="4.1" height="15" fill="#e25858" rx="2" ry="2"/>
+<text x="1188.9" y="350.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>GCTaskThread::run() (5 samples, 0.12%)</title><rect x="1185.9" y="323.0" width="1.4" height="15" fill="#c4c439" rx="2" ry="2"/>
+<text x="1188.9" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>GCTaskManager::get_task(unsigned int) (5 samples, 0.12%)</title><rect x="1185.9" y="307.0" width="1.4" height="15" fill="#baba36" rx="2" ry="2"/>
+<text x="1188.9" y="318.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>Monitor::wait(bool, long, bool) (5 samples, 0.12%)</title><rect x="1185.9" y="291.0" width="1.4" height="15" fill="#b0b032" rx="2" ry="2"/>
+<text x="1188.9" y="302.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>Monitor::IWait(Thread*, long) (5 samples, 0.12%)</title><rect x="1185.9" y="275.0" width="1.4" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="1188.9" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ParkCommon(ParkEvent*, long) (5 samples, 0.12%)</title><rect x="1185.9" y="259.0" width="1.4" height="15" fill="#df5454" rx="2" ry="2"/>
+<text x="1188.9" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>os::PlatformEvent::park() (5 samples, 0.12%)</title><rect x="1185.9" y="243.0" width="1.4" height="15" fill="#b6b634" rx="2" ry="2"/>
+<text x="1188.9" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__psynch_cvwait (4 samples, 0.09%)</title><rect x="1185.9" y="227.0" width="1.1" height="15" fill="#fc7d7d" rx="2" ry="2"/>
+<text x="1188.9" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>VMThread::run() (10 samples, 0.23%)</title><rect x="1187.3" y="323.0" width="2.7" height="15" fill="#c5c53a" rx="2" ry="2"/>
+<text x="1190.3" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>VMThread::loop() (10 samples, 0.23%)</title><rect x="1187.3" y="307.0" width="2.7" height="15" fill="#b6b634" rx="2" ry="2"/>
+<text x="1190.3" y="318.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>VMThread::evaluate_operation(VM_Operation*) (9 samples, 0.21%)</title><rect x="1187.5" y="291.0" width="2.5" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="1190.5" y="302.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>VM_Operation::evaluate() (9 samples, 0.21%)</title><rect x="1187.5" y="275.0" width="2.5" height="15" fill="#b4b433" rx="2" ry="2"/>
+<text x="1190.5" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>VM_ParallelGCFailedAllocation::doit() (9 samples, 0.21%)</title><rect x="1187.5" y="259.0" width="2.5" height="15" fill="#b7b735" rx="2" ry="2"/>
+<text x="1190.5" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ParallelScavengeHeap::failed_mem_allocate(unsigned long) (9 samples, 0.21%)</title><rect x="1187.5" y="243.0" width="2.5" height="15" fill="#b2b233" rx="2" ry="2"/>
+<text x="1190.5" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>PSScavenge::invoke() (9 samples, 0.21%)</title><rect x="1187.5" y="227.0" width="2.5" height="15" fill="#c3c339" rx="2" ry="2"/>
+<text x="1190.5" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>PSScavenge::invoke_no_policy() (9 samples, 0.21%)</title><rect x="1187.5" y="211.0" width="2.5" height="15" fill="#bcbc37" rx="2" ry="2"/>
+<text x="1190.5" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>StringTable::unlink_or_oops_do(BoolObjectClosure*, OopClosure*, int*, int*) (8 samples, 0.19%)</title><rect x="1187.5" y="195.0" width="2.2" height="15" fill="#b6b634" rx="2" ry="2"/>
+<text x="1190.5" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>StringTable::buckets_unlink_or_oops_do(BoolObjectClosure*, OopClosure*, int, int, BasicHashtable&lt;(MemoryType)9&gt;::BucketUnlinkContext*) (7 samples, 0.16%)</title><rect x="1187.8" y="179.0" width="1.9" height="15" fill="#dada41" rx="2" ry="2"/>
+<text x="1190.8" y="190.0"></text>
+</g>
+</svg>
